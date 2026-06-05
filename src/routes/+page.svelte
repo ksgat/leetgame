@@ -28,6 +28,8 @@
 		text: string;
 	};
 
+	type ActiveTab = 'code' | 'prompt';
+
 	const maxEntries = 200;
 
 	const starterCode = `fitCanvas();
@@ -36,7 +38,7 @@ let t = 0;
 
 loop(({ dt, width, height }) => {
   t += dt;
-  clear('#10151f');
+  clear('#fffdf4');
 
   for (let i = 0; i < 80; i++) {
     const p = i / 80;
@@ -45,7 +47,7 @@ loop(({ dt, width, height }) => {
     const r = 12 + Math.sin(t + i) * 8;
 
     ctx.beginPath();
-    ctx.fillStyle = \`hsl(\${190 + p * 130}, 78%, 58%)\`;
+    ctx.fillStyle = \`hsl(\${25 + p * 260}, 92%, 62%)\`;
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   }
@@ -53,23 +55,146 @@ loop(({ dt, width, height }) => {
 
 console.log('creative coding sandbox ready');`;
 
+	const promptMarkdown = `# Trinket Sorter
+
+Lorem ipsum dolor sit amet, **collect three shiny trinkets**, and keep the shelf from overflowing.
+
+## Goal
+
+- Build something tiny, bright, and interactive.
+- Use the canvas helpers already available in the sandbox.
+- Make it feel like a busy little shop display.
+
+## Starter Ideas
+
+> Little objects should move, bounce, sparkle, stack, or misbehave.
+
+\`\`\`js
+// helpers available in the sandbox
+clear('#fffdf4');
+loop(({ dt, width, height }) => {
+  // draw your trinkets here
+});
+\`\`\`
+
+## Notes
+
+This is placeholder markdown for now. Later this panel can load today's challenge text.`;
+
 	let code = $state(starterCode);
 	let entries = $state<Entry[]>([]);
 	let iframeRef = $state<HTMLIFrameElement>();
 	let textareaRef = $state<HTMLTextAreaElement>();
 	let gutterRef = $state<HTMLPreElement>();
 	let status = $state<SandboxStatus>('idle');
+	let activeTab = $state<ActiveTab>('code');
 	let hasBootedSandbox = $state(false);
 	let runId = 0;
 	let entryId = 0;
 	let lineNumberText = $derived(
 		Array.from({ length: Math.max(1, code.split('\n').length) }, (_, index) => index + 1).join('\n')
 	);
+	let promptHtml = $derived(renderMarkdown(promptMarkdown));
 
 	const addEntry = (type: Entry['type'], text: string) => {
 		const normalized = text.length > 6000 ? `${text.slice(0, 6000)}\n...truncated` : text;
 		entries = [...entries, { id: entryId++, type, text: normalized }].slice(-maxEntries);
 	};
+
+	function escapeHtml(value: string) {
+		return value
+			.replaceAll('&', '&amp;')
+			.replaceAll('<', '&lt;')
+			.replaceAll('>', '&gt;')
+			.replaceAll('"', '&quot;')
+			.replaceAll("'", '&#39;');
+	}
+
+	function renderInlineMarkdown(value: string) {
+		return escapeHtml(value)
+			.replace(/`([^`]+)`/g, '<code>$1</code>')
+			.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+			.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+	}
+
+	function renderMarkdown(source: string) {
+		const lines = source.split('\n');
+		const html: string[] = [];
+		let inList = false;
+		let inCode = false;
+		let codeLines: string[] = [];
+
+		const closeList = () => {
+			if (!inList) return;
+			html.push('</ul>');
+			inList = false;
+		};
+
+		for (const line of lines) {
+			if (line.startsWith('```')) {
+				if (inCode) {
+					html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+					codeLines = [];
+					inCode = false;
+				} else {
+					closeList();
+					inCode = true;
+				}
+				continue;
+			}
+
+			if (inCode) {
+				codeLines.push(line);
+				continue;
+			}
+
+			if (!line.trim()) {
+				closeList();
+				continue;
+			}
+
+			if (line.startsWith('### ')) {
+				closeList();
+				html.push(`<h3>${renderInlineMarkdown(line.slice(4))}</h3>`);
+				continue;
+			}
+
+			if (line.startsWith('## ')) {
+				closeList();
+				html.push(`<h2>${renderInlineMarkdown(line.slice(3))}</h2>`);
+				continue;
+			}
+
+			if (line.startsWith('# ')) {
+				closeList();
+				html.push(`<h1>${renderInlineMarkdown(line.slice(2))}</h1>`);
+				continue;
+			}
+
+			if (line.startsWith('> ')) {
+				closeList();
+				html.push(`<blockquote>${renderInlineMarkdown(line.slice(2))}</blockquote>`);
+				continue;
+			}
+
+			if (line.startsWith('- ')) {
+				if (!inList) {
+					html.push('<ul>');
+					inList = true;
+				}
+				html.push(`<li>${renderInlineMarkdown(line.slice(2))}</li>`);
+				continue;
+			}
+
+			closeList();
+			html.push(`<p>${renderInlineMarkdown(line)}</p>`);
+		}
+
+		closeList();
+		if (inCode) html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+
+		return html.join('');
+	}
 
 	const syncEditorScroll = () => {
 		if (gutterRef && textareaRef) gutterRef.scrollTop = textareaRef.scrollTop;
@@ -153,10 +278,10 @@ console.log('creative coding sandbox ready');`;
 			body {
 				display: grid;
 				place-items: center;
-				background: #10151f;
-				color: #9fb0c6;
-				font: 700 13px Inter, ui-sans-serif, system-ui, sans-serif;
-				letter-spacing: 0.08em;
+				background: #fffdf4;
+				color: #21445f;
+				font: 800 14px "Comic Sans MS", "Comic Sans", ui-rounded, cursive;
+				letter-spacing: 0.03em;
 				text-transform: uppercase;
 			}
 		</style>
@@ -181,9 +306,9 @@ console.log('creative coding sandbox ready');`;
 			* { box-sizing: border-box; }
 			html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 			body {
-				background: #10151f;
-				color: #e7edf7;
-				font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+				background: #fffdf4;
+				color: #242136;
+				font-family: "Comic Sans MS", "Comic Sans", ui-rounded, cursive;
 			}
 			#app { width: 100%; height: 100%; overflow: hidden; }
 			canvas { display: block; width: 100%; height: 100%; }
@@ -332,7 +457,7 @@ console.log('creative coding sandbox ready');`;
 					return { width, height, dpr };
 				};
 
-				const clear = (color = '#10151f') => {
+				const clear = (color = '#fffdf4') => {
 					ctx.save();
 					ctx.setTransform(1, 0, 0, 1, 0, 0);
 					ctx.fillStyle = color;
@@ -511,20 +636,49 @@ console.log('creative coding sandbox ready');`;
 				</div>
 			</header>
 
-			<div class="code-editor-shell" aria-label="JavaScript editor">
-				<pre bind:this={gutterRef} class="line-numbers" aria-hidden="true">{lineNumberText}</pre>
-				<textarea
-					bind:this={textareaRef}
-					bind:value={code}
-					aria-label="JavaScript source"
-					autocomplete="off"
-					autocapitalize="off"
-					spellcheck="false"
-					wrap="off"
-					onkeydown={handleEditorKeydown}
-					onscroll={syncEditorScroll}
-				></textarea>
+			<div class="pane-tabs" role="tablist" aria-label="Sandbox panels">
+				<button
+					type="button"
+					role="tab"
+					class:active={activeTab === 'code'}
+					aria-selected={activeTab === 'code'}
+					onclick={() => (activeTab = 'code')}
+				>
+					Code
+				</button>
+				<button
+					type="button"
+					role="tab"
+					class:active={activeTab === 'prompt'}
+					aria-selected={activeTab === 'prompt'}
+					onclick={() => (activeTab = 'prompt')}
+				>
+					Prompt
+				</button>
 			</div>
+
+			{#if activeTab === 'code'}
+				<div class="code-editor-shell" aria-label="JavaScript editor" role="tabpanel">
+					<pre bind:this={gutterRef} class="line-numbers" aria-hidden="true">{lineNumberText}</pre>
+					<textarea
+						bind:this={textareaRef}
+						bind:value={code}
+						aria-label="JavaScript source"
+						autocomplete="off"
+						autocapitalize="off"
+						spellcheck="false"
+						wrap="off"
+						onkeydown={handleEditorKeydown}
+						onscroll={syncEditorScroll}
+					></textarea>
+				</div>
+			{:else}
+				<div class="prompt-shell" role="tabpanel" aria-label="Challenge prompt">
+					<article class="markdown-body">
+						{@html promptHtml}
+					</article>
+				</div>
+			{/if}
 		</aside>
 
 		<section class="result-pane">
@@ -565,16 +719,9 @@ console.log('creative coding sandbox ready');`;
 <style>
 	:global(body) {
 		margin: 0;
-		background: #eef2f6;
-		color: #17202e;
-		font-family:
-			Inter,
-			ui-sans-serif,
-			system-ui,
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			sans-serif;
+		background: #fffdf4;
+		color: #242136;
+		font-family: 'Comic Sans MS', 'Comic Sans', ui-rounded, cursive;
 	}
 
 	:global(button),
@@ -585,7 +732,14 @@ console.log('creative coding sandbox ready');`;
 	.app-shell {
 		min-height: 100vh;
 		padding: 18px;
-		background: #eef2f6;
+		background:
+			linear-gradient(90deg, rgba(35, 201, 255, 0.14) 1px, transparent 1px),
+			linear-gradient(rgba(255, 204, 51, 0.16) 1px, transparent 1px),
+			linear-gradient(135deg, #fffdf4 0%, #f7fffb 48%, #f6fbff 100%);
+		background-size:
+			28px 28px,
+			28px 28px,
+			auto;
 	}
 
 	.workspace {
@@ -602,13 +756,14 @@ console.log('creative coding sandbox ready');`;
 
 	.editor-pane {
 		display: grid;
-		grid-template-rows: auto minmax(0, 1fr);
+		grid-template-rows: auto auto minmax(0, 1fr);
 		height: calc(100vh - 36px);
 		min-height: 0;
 		overflow: hidden;
-		border: 1px solid #cfd8e3;
+		border: 2px solid #242136;
 		border-radius: 8px;
-		background: #f8fafc;
+		background: #ffffff;
+		box-shadow: 7px 7px 0 #00c2ff;
 	}
 
 	.pane-header,
@@ -617,8 +772,8 @@ console.log('creative coding sandbox ready');`;
 		align-items: center;
 		justify-content: space-between;
 		gap: 12px;
-		border-bottom: 1px solid #d8e0ea;
-		background: #ffffff;
+		border-bottom: 2px solid #242136;
+		background: #fff8c9;
 	}
 
 	.pane-header {
@@ -627,10 +782,10 @@ console.log('creative coding sandbox ready');`;
 
 	.eyebrow {
 		margin: 0 0 3px;
-		color: #5c6b7d;
+		color: #007e7a;
 		font-size: 0.72rem;
 		font-weight: 800;
-		letter-spacing: 0.08em;
+		letter-spacing: 0.04em;
 		text-transform: uppercase;
 	}
 
@@ -638,6 +793,7 @@ console.log('creative coding sandbox ready');`;
 		margin: 0;
 		font-size: 1.1rem;
 		line-height: 1.2;
+		color: #242136;
 	}
 
 	.actions {
@@ -649,17 +805,20 @@ console.log('creative coding sandbox ready');`;
 
 	button {
 		min-width: 76px;
-		border: 1px solid #17202e;
+		border: 2px solid #242136;
 		border-radius: 6px;
-		background: #17202e;
+		background: #ff5c35;
 		color: #ffffff;
 		padding: 8px 12px;
 		font-weight: 800;
 		cursor: pointer;
+		box-shadow: 3px 3px 0 #242136;
 	}
 
 	button:hover:not(:disabled) {
-		background: #27344a;
+		background: #ff7a4f;
+		transform: translate(-1px, -1px);
+		box-shadow: 4px 4px 0 #242136;
 	}
 
 	button:disabled {
@@ -668,13 +827,36 @@ console.log('creative coding sandbox ready');`;
 	}
 
 	button.ghost {
-		border-color: #b8c4d2;
+		border-color: #242136;
 		background: #ffffff;
-		color: #17202e;
+		color: #242136;
+		box-shadow: 3px 3px 0 #ffcc33;
 	}
 
 	button.ghost:hover:not(:disabled) {
-		background: #edf3f8;
+		background: #e7fb55;
+	}
+
+	.pane-tabs {
+		display: flex;
+		gap: 8px;
+		padding: 10px;
+		border-bottom: 2px solid #242136;
+		background: #ffffff;
+	}
+
+	.pane-tabs button {
+		min-width: 0;
+		border-color: #242136;
+		background: #ffffff;
+		color: #242136;
+		padding: 7px 12px;
+		box-shadow: 3px 3px 0 #00c2ff;
+	}
+
+	.pane-tabs button.active {
+		background: #e7fb55;
+		box-shadow: 3px 3px 0 #ffcc33;
 	}
 
 	.code-editor-shell {
@@ -685,8 +867,8 @@ console.log('creative coding sandbox ready');`;
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
-		background: #10151f;
-		color: #e7edf7;
+		background: #fffdf4;
+		color: #242136;
 	}
 
 	.line-numbers,
@@ -695,7 +877,7 @@ console.log('creative coding sandbox ready');`;
 		margin: 0;
 		padding: 18px 0;
 		border: 0;
-		font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+		font-family: 'Comic Sans MS', 'Comic Sans', 'SFMono-Regular', Consolas, cursive;
 		font-size: 0.92rem;
 		line-height: 1.6;
 		tab-size: 2;
@@ -707,9 +889,9 @@ console.log('creative coding sandbox ready');`;
 		height: 100%;
 		min-height: 0;
 		overflow: hidden;
-		border-right: 1px solid #263348;
-		background: #0c111a;
-		color: #627086;
+		border-right: 2px solid #242136;
+		background: #dff7ff;
+		color: #0072a3;
 		padding-right: 10px;
 		text-align: right;
 		user-select: none;
@@ -727,14 +909,99 @@ console.log('creative coding sandbox ready');`;
 		outline: 0;
 		background: transparent;
 		color: inherit;
-		caret-color: #68e0b7;
+		caret-color: #ff5c35;
 		padding-left: 16px;
 		padding-right: 18px;
 		overflow: auto;
 	}
 
 	textarea::selection {
-		background: rgba(104, 224, 183, 0.24);
+		background: rgba(35, 201, 255, 0.28);
+	}
+
+	.prompt-shell {
+		min-height: 0;
+		overflow: auto;
+		background: #fffdf4;
+		color: #242136;
+		padding: 20px;
+	}
+
+	.markdown-body {
+		max-width: 720px;
+	}
+
+	:global(.markdown-body h1),
+	:global(.markdown-body h2),
+	:global(.markdown-body h3),
+	:global(.markdown-body p),
+	:global(.markdown-body ul),
+	:global(.markdown-body blockquote),
+	:global(.markdown-body pre) {
+		margin-top: 0;
+	}
+
+	:global(.markdown-body h1) {
+		margin-bottom: 14px;
+		font-size: 1.75rem;
+		line-height: 1.1;
+	}
+
+	:global(.markdown-body h2) {
+		margin-bottom: 10px;
+		padding-top: 8px;
+		color: #007e7a;
+		font-size: 1.08rem;
+		line-height: 1.2;
+	}
+
+	:global(.markdown-body p),
+	:global(.markdown-body li),
+	:global(.markdown-body blockquote) {
+		font-size: 0.95rem;
+		line-height: 1.55;
+	}
+
+	:global(.markdown-body ul) {
+		padding-left: 22px;
+	}
+
+	:global(.markdown-body li::marker) {
+		color: #ff5c35;
+	}
+
+	:global(.markdown-body blockquote) {
+		margin: 0 0 16px;
+		border: 2px solid #242136;
+		border-left-width: 8px;
+		border-radius: 8px;
+		background: #dff7ff;
+		padding: 12px 14px;
+		box-shadow: 4px 4px 0 #ffcc33;
+	}
+
+	:global(.markdown-body code) {
+		border: 1px solid #242136;
+		border-radius: 4px;
+		background: #ffffff;
+		padding: 1px 5px;
+		font-family: 'Comic Sans MS', 'Comic Sans', 'SFMono-Regular', Consolas, cursive;
+	}
+
+	:global(.markdown-body pre) {
+		overflow: auto;
+		border: 2px solid #242136;
+		border-radius: 8px;
+		background: #ffffff;
+		padding: 12px;
+		box-shadow: 4px 4px 0 #00c2ff;
+	}
+
+	:global(.markdown-body pre code) {
+		border: 0;
+		background: transparent;
+		padding: 0;
+		white-space: pre;
 	}
 
 	.result-pane {
@@ -748,55 +1015,59 @@ console.log('creative coding sandbox ready');`;
 		display: grid;
 		grid-template-rows: auto minmax(0, 1fr);
 		overflow: hidden;
-		border: 1px solid #cfd8e3;
+		border: 2px solid #242136;
 		border-radius: 8px;
 		background: #ffffff;
+		box-shadow: 7px 7px 0 #ffcc33;
 	}
 
 	.preview-bar {
 		min-height: 42px;
 		padding: 0 12px;
-		color: #344154;
+		color: #242136;
 		font-size: 0.78rem;
 		font-weight: 800;
 		text-transform: uppercase;
 	}
 
 	.preview-bar span:last-child {
-		border: 1px solid #cfd8e3;
+		border: 2px solid #242136;
 		border-radius: 999px;
 		padding: 3px 8px;
-		color: #516174;
+		background: #ffffff;
+		color: #242136;
 		font-size: 0.68rem;
 	}
 
 	.preview-bar span:last-child.active {
-		border-color: #32bf8f;
-		color: #137656;
+		border-color: #242136;
+		background: #e7fb55;
+		color: #214600;
 	}
 
 	.preview-bar span:last-child.error-status {
-		border-color: #ef6f6c;
-		color: #b42320;
+		border-color: #242136;
+		background: #ff8a8a;
+		color: #641b24;
 	}
 
 	iframe {
 		width: 100%;
 		height: 100%;
 		border: 0;
-		background: #10151f;
+		background: #fffdf4;
 	}
 
 	.console {
 		overflow: auto;
-		background: #17202e;
+		background: #f7fffb;
 		padding: 12px;
 	}
 
 	.empty {
 		margin: 0;
-		color: #92a0b3;
-		font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+		color: #62717f;
+		font-family: 'Comic Sans MS', 'Comic Sans', ui-rounded, cursive;
 		font-size: 0.86rem;
 	}
 
@@ -807,24 +1078,24 @@ console.log('creative coding sandbox ready');`;
 		margin: 0 0 8px;
 		white-space: pre-wrap;
 		word-break: break-word;
-		color: #dce7f5;
-		font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+		color: #242136;
+		font-family: 'Comic Sans MS', 'Comic Sans', 'SFMono-Regular', Consolas, cursive;
 		font-size: 0.82rem;
 		line-height: 1.45;
 	}
 
 	.console pre span {
-		color: #89d7b0;
+		color: #008a65;
 		font-weight: 800;
 	}
 
 	.console pre.warn span {
-		color: #ffd166;
+		color: #b77400;
 	}
 
 	.console pre.error,
 	.console pre.error span {
-		color: #ff8a8a;
+		color: #d63230;
 	}
 
 	@media (max-width: 900px) {
