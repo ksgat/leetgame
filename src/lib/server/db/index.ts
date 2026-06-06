@@ -3,8 +3,19 @@ import { neon } from '@neondatabase/serverless';
 import * as schema from './schema';
 import { env } from '$env/dynamic/private';
 
-if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
+type Database = ReturnType<typeof drizzle<typeof schema>>;
 
-const client = neon(env.DATABASE_URL);
+let database: Database | undefined;
 
-export const db = drizzle(client, { schema });
+const getDatabase = () => {
+	if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
+
+	database ??= drizzle(neon(env.DATABASE_URL), { schema });
+	return database;
+};
+
+export const db = new Proxy({} as Database, {
+	get(_target, property, receiver) {
+		return Reflect.get(getDatabase(), property, receiver);
+	}
+});

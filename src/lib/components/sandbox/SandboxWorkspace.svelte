@@ -3,17 +3,26 @@
 	import LogPanel from './LogPanel.svelte';
 	import ViewerPanel from './ViewerPanel.svelte';
 	import { appShellClass, workspaceClass } from './classes';
-	import { promptMarkdown, starterCode } from '$lib/sandbox/content';
+	import {
+		promptMarkdown as fallbackPromptMarkdown,
+		starterCode as fallbackStarterCode
+	} from '$lib/sandbox/content';
 	import { buildDocument, stoppedDocument } from '$lib/sandbox/runtime';
 	import type { LogEntry, SandboxMessage, SandboxStatus } from '$lib/sandbox/types';
 
 	const maxEntries = 200;
 
-	let code = $state(starterCode);
+	let {
+		initialCode = fallbackStarterCode,
+		promptMarkdown = fallbackPromptMarkdown
+	}: { initialCode?: string | null; promptMarkdown?: string } = $props();
+
+	let code = $state(fallbackStarterCode);
 	let entries = $state<LogEntry[]>([]);
 	let iframeRef = $state<HTMLIFrameElement>();
 	let status = $state<SandboxStatus>('idle');
 	let hasBootedSandbox = $state(false);
+	let hasInitializedCode = $state(false);
 	let runId = 0;
 	let entryId = 0;
 
@@ -41,9 +50,15 @@
 	};
 
 	const resetCode = () => {
-		code = starterCode;
+		code = initialCode || fallbackStarterCode;
 		runCode();
 	};
+
+	$effect(() => {
+		if (hasInitializedCode) return;
+		code = initialCode || fallbackStarterCode;
+		hasInitializedCode = true;
+	});
 
 	$effect(() => {
 		const handleMessage = (event: MessageEvent<SandboxMessage & { sandboxId?: number }>) => {
